@@ -1,0 +1,41 @@
+name: SF Apartment Scanner
+
+on:
+  schedule:
+    # Runs at 8:00 AM, 5:00 PM, and 9:00 PM Pacific Time (PST = UTC-8, PDT = UTC-7)
+    # Using PST offsets: 8AM PST = 16:00 UTC, 5PM PST = 01:00 UTC, 9PM PST = 05:00 UTC
+    - cron: "0 16,1,5 * * *"
+  workflow_dispatch:  # Allow manual runs from the GitHub Actions UI
+
+jobs:
+  scan:
+    name: Run Apartment Scanner
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      GEMINI_API_KEY:      ${{ secrets.GEMINI_API_KEY }}
+      RESEND_API_KEY:      ${{ secrets.RESEND_API_KEY }}
+      GIST_TOKEN:          ${{ secrets.GIST_TOKEN }}
+      GIST_ID:             ${{ secrets.GIST_ID }}
+      NOTIFICATION_EMAIL:  ${{ secrets.NOTIFICATION_EMAIL }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scanner pipeline
+        run: python main.py
+
+      - name: Log run summary
+        if: always()
+        run: echo "Pipeline run completed at $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
