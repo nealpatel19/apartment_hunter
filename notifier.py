@@ -1,17 +1,19 @@
 """
-notifier.py — Email Dispatcher
+notifier.py — Email Dispatcher via Gmail SMTP
 
 Generates a premium dark-mode HTML email digest of qualified listings
-and dispatches it via the Resend API. Includes one-click landlord outreach buttons.
+and dispatches it directly via Gmail SMTP (smtplib). Supports sending
+to multiple recipient emails without domain verification.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import smtplib
 from datetime import datetime, timezone
-
-import resend
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 from scorer import ScoredListing
 
@@ -21,14 +23,18 @@ logger = logging.getLogger(__name__)
 # Configuration
 # ---------------------------------------------------------------------------
 
-RESEND_API_KEY: str = os.environ["RESEND_API_KEY"]
+SMTP_HOST: str = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT: int = int(os.environ.get("SMTP_PORT", "587"))
+
+# Sender credentials
+SMTP_EMAIL: str = os.environ.get("SMTP_EMAIL", "")
+SMTP_PASSWORD: str = os.environ.get("SMTP_PASSWORD", "")
+
+# Recipient email list (comma-separated: "email1@gmail.com, email2@gmail.com")
 NOTIFICATION_EMAIL_RAW: str = os.environ.get("NOTIFICATION_EMAIL", "")
 RECIPIENT_EMAILS: list[str] = [
     e.strip() for e in NOTIFICATION_EMAIL_RAW.split(",") if e.strip()
 ]
-FROM_EMAIL: str = "SF Apartment Scout <onboarding@resend.dev>"
-
-resend.api_key = RESEND_API_KEY
 
 # ---------------------------------------------------------------------------
 # Score badge color logic
@@ -266,12 +272,20 @@ def _build_html_email(scored_listings: list[ScoredListing]) -> str:
 
 def send_digest(scored_listings: list[ScoredListing]) -> None:
     """
-    Send the HTML email digest via Resend.
+    Send the HTML email digest via Gmail SMTP (smtplib).
 
     If the list is empty, logs and returns without sending.
     """
     if not scored_listings:
         logger.info("No qualified listings to send — skipping email dispatch.")
+        return
+
+    if not RECIPIENT_EMAILS:
+        logger.error("No recipient emails configured in NOTIFICATION_EMAIL.")
+        return
+
+    if not SMTP_EMAIL or not SMTP_PASSWORD:
+        logger.error("SMTP_EMAIL or SMTP_PASSWORD environment variables missing.")
         return
 
     count = len(scored_listings)
@@ -282,19 +296,30 @@ def send_digest(scored_listings: list[ScoredListing]) -> None:
 
     html_body = _build_html_email(scored_listings)
 
-    try:
-        if not RECIPIENT_EMAILS:
-            logger.error("No recipient emails configured in NOTIFICATION_EMAIL.")
-            return
+    # Build MIME message
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"SF Apartment Scout <{SMTP_EMAIL}>"
+    msg["To"] = ", ".join(RECIPIENT_EMAILS)
 
-        params = resend.Emails.SendParams(
-            from_=FROM_EMAIL,
-            to=RECIPIENT_EMAILS,
-            subject=subject,
-            html=html_body,
+    # Attach HTML content
+    html_part = MIMEText(html_body, "html", "utf-8")
+    msg.attach(html_part)
+
+    try:
+        logger.info("Connecting to SMTP server %s:%d...", SMTP_HOST, SMTP_PORT)
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(SMTP_EMAIL, SMTP_PASSWORD)
+            server.sendmail(SMTP_EMAIL, RECIPIENT_EMAILS, msg.as_string())
+
+        logger.info(
+            "Email dispatched successfully to %d recipient(s): %s",
+            len(RECIPIENT_EMAILS),
+            ", ".join(RECIPIENT_EMAILS),
         )
-        result = resend.Emails.send(params)
-        logger.info("Email dispatched successfully. Resend ID: %s", result.get("id", "unknown"))
     except Exception as exc:
-        logger.error("Failed to send email via Resend: %s", exc)
+        logger.error("Failed to send email via SMTP: %s", exc)
         raise

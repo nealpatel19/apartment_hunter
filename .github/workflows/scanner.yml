@@ -15,7 +15,8 @@ jobs:
 
     env:
       GEMINI_API_KEY:      ${{ secrets.GEMINI_API_KEY }}
-      RESEND_API_KEY:      ${{ secrets.RESEND_API_KEY }}
+      SMTP_EMAIL:          ${{ secrets.SMTP_EMAIL }}
+      SMTP_PASSWORD:       ${{ secrets.SMTP_PASSWORD }}
       GIST_TOKEN:          ${{ secrets.GIST_TOKEN }}
       GIST_ID:             ${{ secrets.GIST_ID }}
       NOTIFICATION_EMAIL:  ${{ secrets.NOTIFICATION_EMAIL }}

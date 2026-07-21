@@ -22,10 +22,10 @@ Craigslist RSS
 [scorer.py]     — Deterministic weighted scoring (Layout 35%, Price 30%, Location 20%, Amenities 15%)
      │
      ▼
-[notifier.py]   — Dark-mode HTML email digest with one-click landlord outreach via Resend
+[notifier.py]   — Dark-mode HTML email digest dispatched via Gmail SMTP (smtplib)
 ```
 
-**Runtime cost: ~$0/month** — GitHub Actions (free tier), Gemini API (generous free quota), Resend (3,000 emails/month free), GitHub Gist (free).
+**Runtime cost: $0/month** — GitHub Actions (free tier), Gemini API (generous free quota), Gmail SMTP (500 emails/day free), GitHub Gist (free).
 
 ---
 
@@ -33,11 +33,11 @@ Craigslist RSS
 
 - Python 3.10+
 - A GitHub account (for Actions + Gist)
-- API accounts for Google AI and Resend (both have free tiers)
+- A Google account (for Gemini API + Gmail SMTP App Password)
 
 ---
 
-## Step 1: Get Your API Keys
+## Step 1: Setup Credentials
 
 ### 1a. Google Gemini API Key (`GEMINI_API_KEY`)
 
@@ -45,12 +45,17 @@ Craigslist RSS
 2. Click **"Create API key"**
 3. Copy the generated key — this is your `GEMINI_API_KEY`
 
-### 1b. Resend API Key (`RESEND_API_KEY`)
+### 1b. Gmail App Password (`SMTP_EMAIL` & `SMTP_PASSWORD`)
 
-1. Sign up at [resend.com](https://resend.com)
-2. In the dashboard, go to **API Keys → Create API Key**
-3. Name it `sf-apartment-scanner` and copy it — this is your `RESEND_API_KEY`
-4. **Email verification**: On the free plan, you can only send to your own verified email. Go to **Domains** or use the sandbox sender `onboarding@resend.dev` for testing
+To send emails securely via Gmail SMTP without enabling unsafe apps:
+
+1. Enable **2-Step Verification** on your Google Account if not already enabled ([myaccount.google.com/signinoptions/two-step-verification](https://myaccount.google.com/signinoptions/two-step-verification)).
+2. Go to **App Passwords** ([myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)).
+3. Enter an App Name (e.g. `SF Apartment Scanner`) and click **Create**.
+4. Google will display a **16-character code** (e.g. `abcd efgh ijkl mnop`).
+5. Your secrets are:
+   - `SMTP_EMAIL` = `yourname@gmail.com`
+   - `SMTP_PASSWORD` = `abcdefghijklmnop` (the 16 characters without spaces)
 
 ### 1c. GitHub Gist Token (`GIST_TOKEN`) and Gist ID (`GIST_ID`)
 
@@ -74,46 +79,37 @@ Craigslist RSS
 
 ---
 
-## Step 2: Fork / Clone This Repository
-
-```bash
-git clone https://github.com/YOUR_USERNAME/sf-apartment-scanner.git
-cd sf-apartment-scanner
-```
-
-Or fork it directly on GitHub and clone your fork.
-
----
-
-## Step 3: Configure GitHub Secrets
+## Step 2: Configure GitHub Secrets
 
 In your repository on GitHub:
 
 1. Go to **Settings → Secrets and variables → Actions**
 2. Click **"New repository secret"** for each of the following:
 
-| Secret Name          | Where to Get It                        |
-|----------------------|----------------------------------------|
-| `GEMINI_API_KEY`     | Google AI Studio (Step 1a)             |
-| `RESEND_API_KEY`     | Resend dashboard (Step 1b)             |
-| `GIST_TOKEN`         | GitHub fine-grained PAT (Step 1c)      |
-| `GIST_ID`            | From your Gist URL (Step 1c)           |
-| `NOTIFICATION_EMAIL` | Single or comma-separated emails (`a@x.com, b@x.com`) |
+| Secret Name          | Value / Description                                       |
+|----------------------|-----------------------------------------------------------|
+| `GEMINI_API_KEY`     | Google AI Studio key (Step 1a)                            |
+| `SMTP_EMAIL`         | Your Gmail address (`yourname@gmail.com`)                 |
+| `SMTP_PASSWORD`      | 16-character Google App Password (Step 1b)                |
+| `GIST_TOKEN`         | GitHub fine-grained PAT (Step 1c)                         |
+| `GIST_ID`            | From your Gist URL (Step 1c)                              |
+| `NOTIFICATION_EMAIL` | Single or comma-separated emails (`a@x.com, b@x.com`)    |
 
 ---
 
-## Step 4: Test Locally
+## Step 3: Test Locally
 
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
 # Set environment variables
-export GEMINI_API_KEY="your_key_here"
-export RESEND_API_KEY="your_key_here"
-export GIST_TOKEN="your_token_here"
-export GIST_ID="your_gist_id_here"
-export NOTIFICATION_EMAIL="you@example.com"
+export GEMINI_API_KEY="your_gemini_key"
+export SMTP_EMAIL="yourname@gmail.com"
+export SMTP_PASSWORD="your_16_char_app_password"
+export GIST_TOKEN="your_gist_token"
+export GIST_ID="your_gist_id"
+export NOTIFICATION_EMAIL="you@gmail.com, partner@gmail.com"
 
 # Run the full pipeline
 python main.py
@@ -121,11 +117,11 @@ python main.py
 
 ---
 
-## Step 5: Deploy — Push to GitHub
+## Step 4: Deploy — Push to GitHub
 
 ```bash
 git add .
-git commit -m "Initial deploy"
+git commit -m "Deploy with Gmail SMTP"
 git push origin main
 ```
 
@@ -186,31 +182,10 @@ sf-apartment-scanner/
 ├── state.py          # GitHub Gist deduplication & state management
 ├── auditor.py        # Gemini AI listing analysis (Pydantic structured output)
 ├── scorer.py         # Deterministic weighted scoring engine
-├── notifier.py       # HTML email digest via Resend
+├── notifier.py       # HTML email digest via Gmail SMTP (smtplib)
 ├── requirements.txt  # Pinned dependencies
 ├── .github/
 │   └── workflows/
 │       └── scanner.yml  # GitHub Actions cron workflow
 └── README.md
 ```
-
----
-
-## Troubleshooting
-
-**No email received?**
-- Check GitHub Actions logs under the **Actions** tab
-- Verify Resend only allows sending to your verified email on the free plan
-- Ensure all secrets are set correctly
-
-**"Gist file not found" warning?**
-- Make sure your Gist file is named exactly `sf_seen_listings.json`
-- Verify the `GIST_ID` is the full ID from the Gist URL (not the username)
-
-**Gemini rate limit errors?**
-- The pipeline has built-in delays between API calls
-- Consider reducing scan frequency if you're on a low-quota tier
-
-**No listings being found?**
-- Craigslist occasionally changes their RSS URL structure
-- Run locally with `DEBUG` logging: `logging.basicConfig(level=logging.DEBUG)`
