@@ -98,7 +98,7 @@ In your repository on GitHub:
 | `RESEND_API_KEY`     | Resend dashboard (Step 1b)             |
 | `GIST_TOKEN`         | GitHub fine-grained PAT (Step 1c)      |
 | `GIST_ID`            | From your Gist URL (Step 1c)           |
-| `NOTIFICATION_EMAIL` | Your personal email address            |
+| `NOTIFICATION_EMAIL` | Single or comma-separated emails (`a@x.com, b@x.com`) |
 
 ---
 

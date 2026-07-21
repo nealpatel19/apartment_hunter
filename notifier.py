@@ -22,7 +22,10 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 RESEND_API_KEY: str = os.environ["RESEND_API_KEY"]
-NOTIFICATION_EMAIL: str = os.environ["NOTIFICATION_EMAIL"]
+NOTIFICATION_EMAIL_RAW: str = os.environ.get("NOTIFICATION_EMAIL", "")
+RECIPIENT_EMAILS: list[str] = [
+    e.strip() for e in NOTIFICATION_EMAIL_RAW.split(",") if e.strip()
+]
 FROM_EMAIL: str = "SF Apartment Scout <onboarding@resend.dev>"
 
 resend.api_key = RESEND_API_KEY
@@ -280,9 +283,13 @@ def send_digest(scored_listings: list[ScoredListing]) -> None:
     html_body = _build_html_email(scored_listings)
 
     try:
+        if not RECIPIENT_EMAILS:
+            logger.error("No recipient emails configured in NOTIFICATION_EMAIL.")
+            return
+
         params = resend.Emails.SendParams(
             from_=FROM_EMAIL,
-            to=[NOTIFICATION_EMAIL],
+            to=RECIPIENT_EMAILS,
             subject=subject,
             html=html_body,
         )
