@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 GEMINI_API_KEY: str = os.environ["GEMINI_API_KEY"]
-MODEL_ID: str = "gemini-2.5-flash-latest"
+MODEL_ID: str = "gemini-3.5-flash-lite"
 
 # Low temperature for factual extraction — minimize hallucination
 TEMPERATURE: float = 0.1
