@@ -3,3 +3,5 @@ feedparser==6.0.11
 requests==2.32.3
 pydantic==2.10.6
 curl_cffi==0.15.0
+playwright==1.49.1
+playwright-stealth==2.0.3
