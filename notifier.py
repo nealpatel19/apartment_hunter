@@ -253,7 +253,7 @@ def _build_html_email(scored_listings: list[ScoredListing]) -> str:
     <!-- Footer -->
     <div style="text-align:center;padding:32px 0 16px;border-top:1px solid #1f2937;margin-top:8px;">
       <p style="color:#4b5563;font-size:12px;margin:0 0 4px;">
-        Powered by Gemini 2.5 Flash · SF Apartment Scanner
+        Powered by Gemini 3.5 Flash Lite · SF Apartment Scanner
       </p>
       <p style="color:#374151;font-size:11px;margin:0;">
         Listings sourced from Craigslist SF · Scores are AI-assisted estimates
@@ -273,11 +273,9 @@ def _build_html_email(scored_listings: list[ScoredListing]) -> str:
 def send_digest(scored_listings: list[ScoredListing]) -> None:
     """
     Send the HTML email digest via Gmail SMTP (smtplib).
-
-    If the list is empty, logs and returns without sending.
     """
     if not scored_listings:
-        logger.info("No qualified listings to send — skipping email dispatch.")
+        logger.info("No qualified listings to send — skipping email digest.")
         return
 
     if not RECIPIENT_EMAILS:
@@ -296,15 +294,11 @@ def send_digest(scored_listings: list[ScoredListing]) -> None:
 
     html_body = _build_html_email(scored_listings)
 
-    # Build MIME message
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"SF Apartment Scout <{SMTP_EMAIL}>"
     msg["To"] = ", ".join(RECIPIENT_EMAILS)
-
-    # Attach HTML content
-    html_part = MIMEText(html_body, "html", "utf-8")
-    msg.attach(html_part)
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
         logger.info("Connecting to SMTP server %s:%d...", SMTP_HOST, SMTP_PORT)
@@ -316,10 +310,53 @@ def send_digest(scored_listings: list[ScoredListing]) -> None:
             server.sendmail(SMTP_EMAIL, RECIPIENT_EMAILS, msg.as_string())
 
         logger.info(
-            "Email dispatched successfully to %d recipient(s): %s",
+            "Digest email dispatched successfully to %d recipient(s): %s",
             len(RECIPIENT_EMAILS),
             ", ".join(RECIPIENT_EMAILS),
         )
     except Exception as exc:
-        logger.error("Failed to send email via SMTP: %s", exc)
+        logger.error("Failed to send digest email via SMTP: %s", exc)
         raise
+
+
+def send_status_update(summary_text: str) -> None:
+    """Send a status update email when no new listings pass filters."""
+    if not RECIPIENT_EMAILS or not SMTP_EMAIL or not SMTP_PASSWORD:
+        logger.warning("SMTP credentials or RECIPIENT_EMAILS missing — cannot send status email.")
+        return
+
+    now = datetime.now(tz=timezone.utc).strftime("%B %d, %Y at %I:%M %p UTC")
+    subject = "🏠 SF Scout: Run Completed (No New Matches)"
+
+    html_body = f"""<!DOCTYPE html>
+<html>
+<body style="background:#0f172a;color:#f9fafb;font-family:sans-serif;padding:30px;text-align:center;">
+  <div style="max-width:500px;margin:0 auto;background:#1f2937;border-radius:12px;padding:24px;border:1px solid #374151;">
+    <div style="font-size:32px;">🏙️</div>
+    <h2 style="color:#f9fafb;margin:10px 0;">SF Apartment Scanner</h2>
+    <p style="color:#9ca3af;font-size:13px;">{now}</p>
+    <div style="background:#111827;border-radius:8px;padding:16px;margin:20px 0;color:#d1d5db;font-size:14px;">
+      {summary_text}
+    </div>
+    <p style="color:#6b7280;font-size:12px;">Scanner is active and checking 3x daily.</p>
+  </div>
+</body>
+</html>"""
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"SF Apartment Scout <{SMTP_EMAIL}>"
+    msg["To"] = ", ".join(RECIPIENT_EMAILS)
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+    try:
+        logger.info("Sending status email to %s...", ", ".join(RECIPIENT_EMAILS))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(SMTP_EMAIL, SMTP_PASSWORD)
+            server.sendmail(SMTP_EMAIL, RECIPIENT_EMAILS, msg.as_string())
+        logger.info("Status email dispatched successfully.")
+    except Exception as exc:
+        logger.error("Failed to send status email: %s", exc)

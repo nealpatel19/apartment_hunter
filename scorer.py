@@ -149,18 +149,20 @@ def score_and_rank(
     """
     Score all audited listings, filter by SCORE_THRESHOLD,
     and return sorted descending by total_score.
+    If no listings pass threshold, returns top 5 scored listings as fallback.
     """
     all_scored = [score_listing(listing, analysis) for listing, analysis in audited]
+    all_scored.sort(key=lambda s: s.total_score, reverse=True)
 
     qualified = [s for s in all_scored if s.total_score >= SCORE_THRESHOLD]
 
-    # Sort descending by score
-    qualified.sort(key=lambda s: s.total_score, reverse=True)
+    if not qualified and all_scored:
+        logger.info("No listings above threshold %.0f. Returning top %d scored listings as fallback.", SCORE_THRESHOLD, min(5, len(all_scored)))
+        return all_scored[:5]
 
     logger.info(
-        "Scoring complete: %d/%d listings above threshold (%.0f).",
+        "Scoring complete: %d/%d listings qualified.",
         len(qualified),
         len(all_scored),
-        SCORE_THRESHOLD,
     )
     return qualified

@@ -6,7 +6,7 @@ Entry point for the SF Apartment Scanner. Executes the full pipeline:
   2. Deduplicate against GitHub Gist state
   3. AI-audit new listings with Gemini
   4. Score and rank qualified listings
-  5. Dispatch email digest via Resend
+  5. Dispatch email digest via Gmail SMTP
   6. Persist updated state back to Gist
 """
 
@@ -19,7 +19,7 @@ from ingestion import fetch_listings
 from state import StateManager
 from auditor import audit_listings
 from scorer import score_and_rank
-from notifier import send_digest
+from notifier import send_digest, send_status_update
 
 # ---------------------------------------------------------------------------
 # Logging setup
@@ -45,10 +45,11 @@ def run() -> None:
     logger.info("=" * 60)
 
     # ── Step 1: Ingest ──────────────────────────────────────────────────────
-    logger.info("[1/5] Ingesting listings from Craigslist RSS feeds...")
+    logger.info("[1/5] Ingesting listings from Craigslist search feeds...")
     raw_listings = fetch_listings()
     if not raw_listings:
-        logger.info("No listings fetched. Exiting early.")
+        logger.info("No listings fetched. Sending status email...")
+        send_status_update("No listings were found matching initial price criteria ($2,400 - $4,400).")
         return
 
     # ── Step 2: Deduplicate ─────────────────────────────────────────────────
@@ -56,14 +57,16 @@ def run() -> None:
     state = StateManager()
     new_listings = state.filter_new(raw_listings)
     if not new_listings:
-        logger.info("All listings already seen. Nothing to process. Exiting.")
+        logger.info("All fetched listings have already been processed in prior runs.")
+        send_status_update(f"Scanned {len(raw_listings)} listings — all have already been processed in previous runs.")
         return
 
     # ── Step 3: AI Audit ────────────────────────────────────────────────────
-    logger.info("[3/5] Running AI audit with Gemini 2.5 Flash (%d listings)...", len(new_listings))
+    logger.info("[3/5] Running AI audit with Gemini (%d listings)...", len(new_listings))
     audited = audit_listings(new_listings)
     if not audited:
-        logger.info("No listings passed AI audit. Persisting seen IDs and exiting.")
+        logger.info("No listings passed AI audit. Sending status update...")
+        send_status_update(f"Scanned {len(new_listings)} new listings — none passed AI scam/bedroom validation.")
         state.mark_seen(new_listings)
         state.save()
         return
@@ -77,8 +80,6 @@ def run() -> None:
     send_digest(qualified)
 
     # ── Persist state ───────────────────────────────────────────────────────
-    # Always mark ALL new listings (including filtered ones) as seen
-    # so we don't re-audit scams or under-threshold listings again
     state.mark_seen(new_listings)
     state.save()
 
@@ -86,7 +87,7 @@ def run() -> None:
     logger.info(
         "Pipeline complete. Processed %d new, %d qualified, %d emailed.",
         len(new_listings),
-        len([a for a in audited]),
+        len(audited),
         len(qualified),
     )
     logger.info("=" * 60)
