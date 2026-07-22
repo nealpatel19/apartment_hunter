@@ -28,7 +28,7 @@ APIFY_TOKEN: str = os.environ.get("APIFY_TOKEN", "")
 
 # Apify Zillow Scraper actor endpoint
 APIFY_ACTOR_URL = (
-    "https://api.apify.com/v2/acts/apify~zillow-scraper/run-sync-get-dataset-items"
+    "https://api.apify.com/v2/acts/maxcopell~zillow-scraper/run-sync-get-dataset-items"
 )
 
 TARGET_ZIP_CODES: list[str] = ["94110", "94117", "94102", "94107", "94114"]
