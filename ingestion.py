@@ -179,49 +179,65 @@ def _parse_search_page(html_content: str, default_zip: str = "") -> list[RawList
 
 def fetch_listings() -> list[RawListing]:
     """
-    Fetch all 2BR listings for SF target zip codes from Craigslist search endpoints.
+    Fetch all 2+BR listings for SF target zip codes from Craigslist AND Zillow.
 
     Returns deduplicated list of RawListing objects pre-filtered by price and loaded
-    with full description text.
+    with description text.
     """
     seen_ids: set[str] = set()
     raw_candidates: list[RawListing] = []
 
-    # 1) Per-zip-code targeted searches
+    # 1) Ingest from Craigslist
+    logger.info("Fetching Craigslist listings...")
     for zip_code in TARGET_ZIP_CODES:
         url = ZIP_SEARCH_TEMPLATE.format(zip_code=zip_code)
         page_html = _fetch_page(url)
         if page_html:
             found = _parse_search_page(page_html, default_zip=zip_code)
-            logger.info("Found %d price-matched listings for zip %s", len(found), zip_code)
+            logger.info("Found %d price-matched Craigslist listings for zip %s", len(found), zip_code)
             for item in found:
                 if item.id not in seen_ids:
                     seen_ids.add(item.id)
                     raw_candidates.append(item)
         time.sleep(REQUEST_DELAY_SECONDS)
 
-    # 2) Broad SF-wide search to capture any un-zipped listings
     broad_html = _fetch_page(BROAD_SEARCH_URL)
     if broad_html:
         found_broad = _parse_search_page(broad_html)
-        logger.info("Found %d price-matched listings in broad SF search", len(found_broad))
+        logger.info("Found %d price-matched listings in broad SF Craigslist search", len(found_broad))
         for item in found_broad:
             if item.id not in seen_ids:
                 seen_ids.add(item.id)
                 raw_candidates.append(item)
 
-    # 3) Fetch full descriptions for candidate listings
+    # Fetch full body text for Craigslist candidates
     final_listings: list[RawListing] = []
     for idx, listing in enumerate(raw_candidates, start=1):
-        logger.info("Fetching full description %d/%d: %s", idx, len(raw_candidates), listing.title[:50])
+        logger.info("Fetching Craigslist body %d/%d: %s", idx, len(raw_candidates), listing.title[:50])
         listing.description = _fetch_description(listing.url) or listing.title
         final_listings.append(listing)
         time.sleep(0.5)
 
+    # 2) Ingest from Zillow / Trulia
+    logger.info("Fetching Zillow/Trulia listings...")
+    try:
+        from zillow_ingestion import fetch_zillow_listings
+        zillow_listings = fetch_zillow_listings()
+        zillow_added = 0
+        for z_item in zillow_listings:
+            if z_item.id not in seen_ids:
+                seen_ids.add(z_item.id)
+                final_listings.append(z_item)
+                zillow_added += 1
+        logger.info("Added %d new Zillow listings.", zillow_added)
+    except Exception as exc:
+        logger.warning("Zillow ingestion skipped due to error: %s", exc)
+
     logger.info(
-        "Ingestion complete: %d total qualified candidate listings (floor=$%d, cap=$%d)",
+        "Multi-source ingestion complete: %d total candidate listings (floor=$%d, cap=$%d)",
         len(final_listings),
         MINIMUM_PRICE_FLOOR,
         MAXIMUM_PRICE_CAP,
     )
     return final_listings
+
