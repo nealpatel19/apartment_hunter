@@ -279,12 +279,13 @@ def send_digest(scored_listings: list[ScoredListing]) -> None:
         return
 
     if not RECIPIENT_EMAILS:
-        logger.error("No recipient emails configured in NOTIFICATION_EMAIL.")
-        return
+        raise ValueError("NOTIFICATION_EMAIL is empty or not set in GitHub secrets.")
 
-    if not SMTP_EMAIL or not SMTP_PASSWORD:
-        logger.error("SMTP_EMAIL or SMTP_PASSWORD environment variables missing.")
-        return
+    if not SMTP_EMAIL:
+        raise ValueError("SMTP_EMAIL is empty or not set in GitHub secrets.")
+
+    if not SMTP_PASSWORD:
+        raise ValueError("SMTP_PASSWORD is empty or not set in GitHub secrets.")
 
     count = len(scored_listings)
     subject = (
@@ -321,9 +322,12 @@ def send_digest(scored_listings: list[ScoredListing]) -> None:
 
 def send_status_update(summary_text: str) -> None:
     """Send a status update email when no new listings pass filters."""
-    if not RECIPIENT_EMAILS or not SMTP_EMAIL or not SMTP_PASSWORD:
-        logger.warning("SMTP credentials or RECIPIENT_EMAILS missing — cannot send status email.")
-        return
+    if not RECIPIENT_EMAILS:
+        raise ValueError("NOTIFICATION_EMAIL is empty or not set in GitHub secrets.")
+    if not SMTP_EMAIL:
+        raise ValueError("SMTP_EMAIL is empty or not set in GitHub secrets.")
+    if not SMTP_PASSWORD:
+        raise ValueError("SMTP_PASSWORD is empty or not set in GitHub secrets.")
 
     now = datetime.now(tz=timezone.utc).strftime("%B %d, %Y at %I:%M %p UTC")
     subject = "🏠 SF Scout: Run Completed (No New Matches)"
@@ -350,7 +354,7 @@ def send_status_update(summary_text: str) -> None:
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
-        logger.info("Sending status email to %s...", ", ".join(RECIPIENT_EMAILS))
+        logger.info("Sending status email from %s to %s...", SMTP_EMAIL, ", ".join(RECIPIENT_EMAILS))
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
             server.ehlo()
             server.starttls()
@@ -360,3 +364,5 @@ def send_status_update(summary_text: str) -> None:
         logger.info("Status email dispatched successfully.")
     except Exception as exc:
         logger.error("Failed to send status email: %s", exc)
+        raise
+
