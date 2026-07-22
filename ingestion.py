@@ -1,20 +1,20 @@
 """
-ingestion.py — Craigslist RSS Ingestion Engine
+ingestion.py — Craigslist Search Ingestion Engine
 
-Fetches 2-bedroom rental listings for target SF zip codes via Craigslist RSS feeds,
-normalizes the data, and applies a minimum price floor to filter room-shares.
+Fetches 2-bedroom rental listings directly from Craigslist's modern HTML search endpoints,
+normalizes the data, applies price floor/cap pre-filters, and retrieves full description text.
 """
 
 from __future__ import annotations
 
 import logging
 import re
+import html
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
-import feedparser
 import requests
 
 logger = logging.getLogger(__name__)
@@ -23,17 +23,24 @@ logger = logging.getLogger(__name__)
 # Configuration
 # ---------------------------------------------------------------------------
 
-# Craigslist SF RSS endpoint for 2-bedroom apartments
-# category: apa = apartments/housing, bedrooms=2
-CRAIGSLIST_RSS_TEMPLATE = (
-    "https://sfbay.craigslist.org/search/apa/rss.xml"
-    "?bedrooms=2&bathrooms=1&postal={zip_code}&search_distance=1"
-)
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/126.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
-# Additional broad search to capture listings without zip attached
-CRAIGSLIST_RSS_BROAD = (
-    "https://sfbay.craigslist.org/search/sfc/apa/rss.xml"
-    "?bedrooms=2&bathrooms=1"
+# Target SF Zip Codes & broad SF search URLs
+ZIP_SEARCH_TEMPLATE = (
+    "https://sfbay.craigslist.org/search/sfc/apa"
+    "?postal={zip_code}&search_distance=1&min_bedrooms=2&max_bedrooms=2"
+)
+BROAD_SEARCH_URL = (
+    "https://sfbay.craigslist.org/search/sfc/apa"
+    "?min_bedrooms=2&max_bedrooms=2"
 )
 
 TARGET_ZIP_CODES: list[str] = ["94110", "94117", "94102", "94107"]
@@ -43,8 +50,7 @@ MINIMUM_PRICE_FLOOR: int = 2_400
 # Absolute max — don't even fetch listings above this
 MAXIMUM_PRICE_CAP: int = 4_400
 
-# Seconds to wait between RSS feed requests (be polite to Craigslist)
-REQUEST_DELAY_SECONDS: float = 1.5
+REQUEST_DELAY_SECONDS: float = 1.0
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -56,7 +62,7 @@ class RawListing:
     id: str
     title: str
     price: int                     # monthly rent in USD
-    zip_code: str                  # best-effort extracted zip code
+    zip_code: str                  # extracted zip code
     url: str
     description: str
     published_at: datetime
@@ -68,7 +74,7 @@ class RawListing:
 
 
 def _extract_price(text: str) -> Optional[int]:
-    """Extract the first dollar amount found in a string."""
+    """Extract numeric price from '$2,600' or similar strings."""
     match = re.search(r"\$\s?([\d,]+)", text)
     if match:
         return int(match.group(1).replace(",", ""))
@@ -76,82 +82,81 @@ def _extract_price(text: str) -> Optional[int]:
 
 
 def _extract_zip(text: str) -> str:
-    """Extract the first 5-digit zip code found in a string, or return empty."""
+    """Extract 5-digit SF zip code from text."""
     match = re.search(r"\b(9\d{4})\b", text)
     return match.group(1) if match else ""
 
 
-def _parse_published(entry) -> datetime:
-    """Convert feedparser time struct to UTC datetime."""
-    if hasattr(entry, "published_parsed") and entry.published_parsed:
-        return datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
-    return datetime.now(tz=timezone.utc)
-
-
-def _fetch_feed(url: str, timeout: int = 15) -> list[dict]:
-    """Fetch a single RSS feed and return its entries as a list."""
+def _fetch_page(url: str, timeout: int = 15) -> Optional[str]:
+    """Fetch URL with browser User-Agent headers."""
     try:
-        response = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"})
-        response.raise_for_status()
-        feed = feedparser.parse(response.content)
-        entries = feed.get("entries", [])
-        logger.info("Fetched %d entries from %s", len(entries), url)
-        return entries
+        resp = requests.get(url, headers=HEADERS, timeout=timeout)
+        resp.raise_for_status()
+        return resp.text
     except requests.RequestException as exc:
-        logger.warning("Failed to fetch feed %s: %s", url, exc)
-        return []
-
-
-def _entry_to_raw_listing(entry: dict) -> Optional[RawListing]:
-    """Convert a single feedparser entry into a RawListing, or None if invalid."""
-    url: str = getattr(entry, "link", "") or entry.get("link", "")
-    title: str = getattr(entry, "title", "") or entry.get("title", "")
-
-    # Craigslist uses the <id> tag or falls back to link
-    listing_id: str = (
-        getattr(entry, "id", "")
-        or entry.get("id", "")
-        or url
-    )
-
-    summary: str = (
-        getattr(entry, "summary", "")
-        or entry.get("summary", "")
-        or ""
-    )
-
-    # Price extraction: try title first, then summary
-    price = _extract_price(title) or _extract_price(summary)
-    if price is None:
-        logger.debug("Skipping entry (no price found): %s", title)
+        logger.warning("Failed to fetch %s: %s", url, exc)
         return None
 
-    # Apply price floor and cap early to save AI calls
-    if price < MINIMUM_PRICE_FLOOR:
-        logger.debug("Skipping entry (price $%d below floor): %s", price, title)
-        return None
-    if price > MAXIMUM_PRICE_CAP:
-        logger.debug("Skipping entry (price $%d above cap): %s", price, title)
-        return None
 
-    # Zip code: try to extract from title, summary, or URL
-    zip_code = (
-        _extract_zip(title)
-        or _extract_zip(summary)
-        or _extract_zip(url)
+def _fetch_description(listing_url: str) -> str:
+    """Fetch full body text for a single listing detail page."""
+    html_text = _fetch_page(listing_url)
+    if not html_text:
+        return ""
+
+    match = re.search(r'<section id="postingbody"[^>]*>(.*?)</section>', html_text, re.DOTALL)
+    if match:
+        # Strip HTML tags and clean up whitespace
+        text = re.sub(r"<[^>]+>", " ", match.group(1))
+        text = html.unescape(text)
+        text = re.sub(r"QR Code Link to This Post", "", text, flags=re.IGNORECASE)
+        return re.sub(r"\s+", " ", text).strip()
+    return ""
+
+
+def _parse_search_page(html_content: str, default_zip: str = "") -> list[RawListing]:
+    """Parse listing cards from Craigslist search HTML."""
+    pattern = (
+        r'<a\s+href="(https://[^\"]*craigslist\.org/view/d/[^\"]+)">\s*'
+        r'<div\s+class="title">(.*?)</div>\s*'
+        r'<div\s+class="details">\s*'
+        r'<div\s+class="price">(.*?)</div>\s*'
+        r'<div\s+class="location">(.*?)</div>'
     )
 
-    published_at = _parse_published(entry)
+    matches = re.findall(pattern, html_content, re.DOTALL)
+    listings: list[RawListing] = []
 
-    return RawListing(
-        id=listing_id,
-        title=title.strip(),
-        price=price,
-        zip_code=zip_code,
-        url=url.strip(),
-        description=summary.strip(),
-        published_at=published_at,
-    )
+    for item in matches:
+        url, title_raw, price_raw, loc_raw = item
+
+        title = html.unescape(title_raw.strip())
+        price = _extract_price(price_raw)
+        if price is None:
+            continue
+
+        if price < MINIMUM_PRICE_FLOOR or price > MAXIMUM_PRICE_CAP:
+            continue
+
+        # Extract unique listing ID from URL (e.g. xyrudhTD8quXVLNcijc4e4)
+        listing_id = url.rstrip("/").split("/")[-1]
+
+        location = html.unescape(loc_raw.strip())
+        zip_code = _extract_zip(title) or _extract_zip(location) or default_zip
+
+        listings.append(
+            RawListing(
+                id=listing_id,
+                title=title,
+                price=price,
+                zip_code=zip_code,
+                url=url,
+                description="",  # populated lazily for qualified candidates
+                published_at=datetime.now(tz=timezone.utc),
+            )
+        )
+
+    return listings
 
 
 # ---------------------------------------------------------------------------
@@ -161,39 +166,49 @@ def _entry_to_raw_listing(entry: dict) -> Optional[RawListing]:
 
 def fetch_listings() -> list[RawListing]:
     """
-    Fetch all 2BR listings for SF target zip codes from Craigslist RSS feeds.
+    Fetch all 2BR listings for SF target zip codes from Craigslist search endpoints.
 
-    Returns a deduplicated list of RawListing objects, pre-filtered by price.
+    Returns deduplicated list of RawListing objects pre-filtered by price and loaded
+    with full description text.
     """
     seen_ids: set[str] = set()
-    listings: list[RawListing] = []
+    raw_candidates: list[RawListing] = []
 
     # 1) Per-zip-code targeted searches
     for zip_code in TARGET_ZIP_CODES:
-        url = CRAIGSLIST_RSS_TEMPLATE.format(zip_code=zip_code)
-        entries = _fetch_feed(url)
-        for entry in entries:
-            raw = _entry_to_raw_listing(entry)
-            if raw and raw.id not in seen_ids:
-                # If zip wasn't in the listing text, use the search zip
-                if not raw.zip_code:
-                    raw.zip_code = zip_code
-                seen_ids.add(raw.id)
-                listings.append(raw)
+        url = ZIP_SEARCH_TEMPLATE.format(zip_code=zip_code)
+        page_html = _fetch_page(url)
+        if page_html:
+            found = _parse_search_page(page_html, default_zip=zip_code)
+            logger.info("Found %d price-matched listings for zip %s", len(found), zip_code)
+            for item in found:
+                if item.id not in seen_ids:
+                    seen_ids.add(item.id)
+                    raw_candidates.append(item)
         time.sleep(REQUEST_DELAY_SECONDS)
 
-    # 2) Broad SF-wide search to capture any missed listings
-    entries = _fetch_feed(CRAIGSLIST_RSS_BROAD)
-    for entry in entries:
-        raw = _entry_to_raw_listing(entry)
-        if raw and raw.id not in seen_ids:
-            seen_ids.add(raw.id)
-            listings.append(raw)
+    # 2) Broad SF-wide search to capture any un-zipped listings
+    broad_html = _fetch_page(BROAD_SEARCH_URL)
+    if broad_html:
+        found_broad = _parse_search_page(broad_html)
+        logger.info("Found %d price-matched listings in broad SF search", len(found_broad))
+        for item in found_broad:
+            if item.id not in seen_ids:
+                seen_ids.add(item.id)
+                raw_candidates.append(item)
+
+    # 3) Fetch full descriptions for candidate listings
+    final_listings: list[RawListing] = []
+    for idx, listing in enumerate(raw_candidates, start=1):
+        logger.info("Fetching full description %d/%d: %s", idx, len(raw_candidates), listing.title[:50])
+        listing.description = _fetch_description(listing.url) or listing.title
+        final_listings.append(listing)
+        time.sleep(0.5)
 
     logger.info(
-        "Ingestion complete: %d listings after price filtering (floor=$%d, cap=$%d)",
-        len(listings),
+        "Ingestion complete: %d total qualified candidate listings (floor=$%d, cap=$%d)",
+        len(final_listings),
         MINIMUM_PRICE_FLOOR,
         MAXIMUM_PRICE_CAP,
     )
-    return listings
+    return final_listings
