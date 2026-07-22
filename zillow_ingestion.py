@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 
 APIFY_TOKEN: str = os.environ.get("APIFY_TOKEN", "")
 
-# Apify Zillow Scraper actor endpoint
+# Apify Zillow ZIP Search Scraper endpoint
 APIFY_ACTOR_URL = (
-    "https://api.apify.com/v2/acts/maxcopell~zillow-scraper/run-sync-get-dataset-items"
+    "https://api.apify.com/v2/acts/maxcopell~zillow-zip-search/run-sync-get-dataset-items"
 )
 
 TARGET_ZIP_CODES: list[str] = ["94110", "94117", "94102", "94107", "94114"]
@@ -71,18 +71,16 @@ def fetch_zillow_listings() -> list[RawListing]:
         logger.info("APIFY_TOKEN secret not set — skipping Zillow ingestion.")
         return []
 
-    logger.info("Connecting to Apify Zillow Scraper API...")
+    logger.info("Connecting to Apify Zillow ZIP Scraper API...")
     url = f"{APIFY_ACTOR_URL}?token={APIFY_TOKEN}"
 
-    search_urls = [
-        {"url": f"https://www.zillow.com/san-francisco-ca-{zip_code}/rentals/2-_beds/2400-4400_mp/"}
-        for zip_code in TARGET_ZIP_CODES
-    ]
-
-    # Search query payload for Apify Zillow Scraper actor
     payload = {
-        "searchUrls": search_urls,
-        "maxItems": 60,
+        "zipCodes": TARGET_ZIP_CODES,
+        "type": "rent",
+        "minPrice": MINIMUM_PRICE_FLOOR,
+        "maxPrice": MAXIMUM_PRICE_CAP,
+        "minBeds": 2,
+        "maxItems": 40,
     }
 
     try:
