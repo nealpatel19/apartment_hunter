@@ -76,7 +76,10 @@ def fetch_zillow_listings() -> list[RawListing]:
 
     payload = {
         "zipCodes": TARGET_ZIP_CODES,
-        "type": "rent",
+        "category": "rent",
+        "status": "FOR_RENT",
+        "isForRent": True,
+        "isForSale": False,
         "minPrice": MINIMUM_PRICE_FLOOR,
         "maxPrice": MAXIMUM_PRICE_CAP,
         "minBeds": 2,
@@ -104,6 +107,12 @@ def fetch_zillow_listings() -> list[RawListing]:
                 or str(item.get("hdpData", {}).get("homeInfo", {}).get("zpid", ""))
             )
             if not zpid or zpid in seen_ids:
+                continue
+
+            # Ensure listing is FOR_RENT and NOT FOR_SALE
+            status_check = f"{item.get('homeStatus')} {item.get('statusType')} {item.get('statusText')} {item.get('hdpData', {}).get('homeInfo', {}).get('homeStatus')}".upper()
+            if "SALE" in status_check or "SOLD" in status_check or "PENDING" in status_check:
+                logger.debug("Skipping non-rental Zillow listing %s: %s", zpid, status_check)
                 continue
 
             address = str(item.get("address", "")) or str(item.get("streetAddress", ""))
