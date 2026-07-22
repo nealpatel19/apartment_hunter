@@ -74,13 +74,14 @@ def fetch_zillow_listings() -> list[RawListing]:
     logger.info("Connecting to Apify Zillow Scraper API...")
     url = f"{APIFY_ACTOR_URL}?token={APIFY_TOKEN}"
 
+    search_urls = [
+        {"url": f"https://www.zillow.com/san-francisco-ca-{zip_code}/rentals/2-_beds/2400-4400_mp/"}
+        for zip_code in TARGET_ZIP_CODES
+    ]
+
     # Search query payload for Apify Zillow Scraper actor
     payload = {
-        "search": "San Francisco, CA",
-        "type": "rent",
-        "minPrice": MINIMUM_PRICE_FLOOR,
-        "maxPrice": MAXIMUM_PRICE_CAP,
-        "minBeds": 2,
+        "searchUrls": search_urls,
         "maxItems": 60,
     }
 
