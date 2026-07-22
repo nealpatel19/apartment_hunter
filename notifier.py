@@ -58,9 +58,10 @@ def _badge_color(score: float) -> tuple[str, str]:
 
 NEIGHBORHOOD_LABELS: dict[str, str] = {
     "94110": "Mission / Bernal Heights",
-    "94117": "Haight / Cole Valley",
-    "94102": "Hayes Valley / Civic Center",
-    "94107": "SOMA / Potrero Hill",
+    "94117": "Haight / Cole Valley / Lower Haight",
+    "94114": "Noe Valley / Castro / Duboce Triangle",
+    "94102": "Hayes Valley",
+    "94107": "SOMA / Potrero Hill / Dogpatch",
 }
 
 

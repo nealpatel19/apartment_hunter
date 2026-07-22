@@ -43,7 +43,15 @@ BROAD_SEARCH_URL = (
     "?min_bedrooms=2&max_bedrooms=2"
 )
 
-TARGET_ZIP_CODES: list[str] = ["94110", "94117", "94102", "94107"]
+TARGET_ZIP_CODES: list[str] = ["94110", "94117", "94102", "94107", "94114"]
+
+# Non-SF cities to exclude immediately from search results
+NON_SF_LOCATIONS = [
+    "mill valley", "oakland", "berkeley", "sausalito", "daly city",
+    "san mateo", "alameda", "marin", "san rafael", "walnut creek",
+    "richmond", "palo alto", "redwood city", "burlingame", "pacifica",
+    "tiburon", "corte madera", "novato"
+]
 
 # Anything below this in SF is almost certainly a room-share or scam
 MINIMUM_PRICE_FLOOR: int = 2_400
@@ -142,6 +150,11 @@ def _parse_search_page(html_content: str, default_zip: str = "") -> list[RawList
         listing_id = url.rstrip("/").split("/")[-1]
 
         location = html.unescape(loc_raw.strip())
+        full_text_check = f"{url} {title} {location}".lower()
+        if any(non_sf in full_text_check for non_sf in NON_SF_LOCATIONS):
+            logger.debug("Skipping non-SF listing: %s (%s)", title, location)
+            continue
+
         zip_code = _extract_zip(title) or _extract_zip(location) or default_zip
 
         listings.append(

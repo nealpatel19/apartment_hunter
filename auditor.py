@@ -56,6 +56,19 @@ BASE_RETRY_WAIT: float = 60.0  # seconds — aligns with the per-minute quota re
 
 
 class ListingAnalysis(BaseModel):
+    is_in_sf_proper: bool = Field(
+        description=(
+            "True ONLY if the property is physically located inside San Francisco city limits. "
+            "MUST BE FALSE for Mill Valley, Oakland, Berkeley, Sausalito, Daly City, Marin, or outside SF."
+        )
+    )
+    is_preferred_neighborhood: bool = Field(
+        description=(
+            "True if located in Mission, Bernal Heights, Potrero Hill, Dogpatch, "
+            "Noe Valley, Castro, Duboce Triangle, Haight, Cole Valley, or true Hayes Valley. "
+            "MUST BE FALSE if located in Tenderloin, Civic Center, TenderNob, Downtown, Mid-Market, or Financial District."
+        )
+    )
     is_scam_or_fishy: bool = Field(
         description=(
             "True if the listing shows signs of fraud, impossibly low rent, "
@@ -276,6 +289,12 @@ def audit_listings(
             continue
 
         # Apply AI-derived filters
+        if not analysis.is_in_sf_proper:
+            logger.info("  → Dropped: outside San Francisco city limits.")
+            continue
+        if not analysis.is_preferred_neighborhood:
+            logger.info("  → Dropped: excluded neighborhood (e.g., Tenderloin, Civic Center, Downtown).")
+            continue
         if analysis.is_scam_or_fishy:
             logger.info("  → Dropped: flagged as scam/fishy.")
             continue

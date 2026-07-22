@@ -31,9 +31,10 @@ MAX_RENT: int = 4_400      # 0 pts at or above this price
 # Location tiers: zip_code -> score (0-100)
 LOCATION_TIER: dict[str, int] = {
     "94110": 100,  # Mission / Bernal Heights
-    "94117": 100,  # Haight / Cole Valley
-    "94102": 100,  # Hayes Valley / Civic Center
-    "94107": 80,   # SOMA / Potrero Hill
+    "94117": 100,  # Haight / Cole Valley / Lower Haight
+    "94114": 100,  # Noe Valley / Castro / Duboce Triangle
+    "94102": 90,   # Hayes Valley
+    "94107": 80,   # SOMA / Potrero Hill / Dogpatch
 }
 DEFAULT_LOCATION_SCORE: int = 50  # Other SF zip codes
 

@@ -156,12 +156,15 @@ Listings below **60 points** are filtered — no email is sent.
 
 ## Target Neighborhoods
 
-| Zip Code | Neighborhood              | Location Tier |
-|----------|---------------------------|---------------|
-| 94110    | Mission / Bernal Heights  | Tier 1 (100)  |
-| 94117    | Haight / Cole Valley      | Tier 1 (100)  |
-| 94102    | Hayes Valley / Civic Center | Tier 1 (100) |
-| 94107    | SOMA / Potrero Hill       | Tier 2 (80)   |
+| Zip Code | Neighborhood                             | Location Tier |
+|----------|------------------------------------------|---------------|
+| 94110    | Mission / Bernal Heights                 | Tier 1 (100)  |
+| 94114    | Noe Valley / Castro / Duboce Triangle    | Tier 1 (100)  |
+| 94117    | Haight / Cole Valley / Lower Haight      | Tier 1 (100)  |
+| 94102    | Hayes Valley (excl. Tenderloin/Downtown) | Tier 1 (90)   |
+| 94107    | SOMA / Potrero Hill / Dogpatch           | Tier 2 (80)   |
+
+*Note: Tenderloin, Civic Center, TenderNob, Downtown, and non-SF cities (Mill Valley, Oakland, etc.) are strictly filtered out by AI & ingestion rules.*
 
 ---
 
