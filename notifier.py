@@ -127,8 +127,8 @@ def _render_listing_card(scored: ScoredListing, rank: int) -> str:
     # Availability Chip Badge logic
     avail_date_str = getattr(analysis, "available_date", "Immediate / Unspecified")
     move_win = getattr(analysis, "move_in_window", "unspecified")
-    if move_win == "september_target":
-        avail_chip = f"<span style='background:#065f46;border:1px solid #059669;border-radius:20px;padding:4px 12px;font-size:12px;color:#a7f3d0;font-weight:600;'>🗓️ Avail: {avail_date_str} (Target Sept Match)</span>"
+    if move_win == "target_fall":
+        avail_chip = f"<span style='background:#065f46;border:1px solid #059669;border-radius:20px;padding:4px 12px;font-size:12px;color:#a7f3d0;font-weight:600;'>🗓️ Avail: {avail_date_str} (Target Match)</span>"
     elif move_win == "august_or_immediate":
         avail_chip = f"<span style='background:#78350f;border:1px solid #d97706;border-radius:20px;padding:4px 12px;font-size:12px;color:#fde68a;font-weight:600;'>⚡ Avail: {avail_date_str} (August Move-In)</span>"
     else:

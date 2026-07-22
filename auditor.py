@@ -120,9 +120,9 @@ class ListingAnalysis(BaseModel):
     move_in_window: str = Field(
         description=(
             "Availability category. Must be exactly one of: "
-            "'september_target' (September move-in), "
+            "'target_fall' (September or October move-in — perfect match), "
             "'august_or_immediate' (August or immediate move-in), "
-            "'october_or_later' (October or later move-in), or "
+            "'late_fall' (November or later move-in), or "
             "'unspecified'."
         )
     )

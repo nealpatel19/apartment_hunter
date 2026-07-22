@@ -117,9 +117,9 @@ def score_listing(listing: RawListing, analysis: ListingAnalysis) -> ScoredListi
 
     # Move-in availability bonus for top sorting priority
     move_in_bonus = 0.0
-    if analysis.move_in_window == "september_target":
-        move_in_bonus = 10.0
-    elif analysis.move_in_window == "october_or_later":
+    if analysis.move_in_window == "target_fall":
+        move_in_bonus = 10.0  # September / October perfect matches
+    elif analysis.move_in_window == "late_fall":
         move_in_bonus = 5.0
 
     total = (
