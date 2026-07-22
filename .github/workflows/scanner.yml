@@ -20,6 +20,7 @@ jobs:
       GIST_TOKEN:          ${{ secrets.GIST_TOKEN }}
       GIST_ID:             ${{ secrets.GIST_ID }}
       NOTIFICATION_EMAIL:  ${{ secrets.NOTIFICATION_EMAIL }}
+      APIFY_TOKEN:         ${{ secrets.APIFY_TOKEN }}
 
     steps:
       - name: Checkout repository
