@@ -2,8 +2,9 @@ name: SF Apartment Scanner
 
 on:
   schedule:
-    # Runs every 3 hours around the clock
-    - cron: "0 */3 * * *"
+    # Runs 4x daily at 9:00 AM, 5:00 PM, 10:00 PM, and 1:00 AM Eastern Time
+    # Eastern EDT (UTC-4): 9AM=13:00 UTC, 5PM=21:00 UTC, 10PM=02:00 UTC, 1AM=05:00 UTC
+    - cron: "0 13,21,2,5 * * *"
   workflow_dispatch:  # Allow manual runs from the GitHub Actions UI
 
 jobs:
