@@ -115,12 +115,21 @@ def score_listing(listing: RawListing, analysis: ListingAnalysis) -> ScoredListi
     s_location = _location_score(listing.zip_code)
     s_amenities = _amenities_score(analysis)
 
+    # Move-in availability bonus for top sorting priority
+    move_in_bonus = 0.0
+    if analysis.move_in_window == "september_target":
+        move_in_bonus = 10.0
+    elif analysis.move_in_window == "october_or_later":
+        move_in_bonus = 5.0
+
     total = (
         0.35 * s_layout
         + 0.30 * s_price
         + 0.20 * s_location
         + 0.15 * s_amenities
+        + move_in_bonus
     )
+    total = min(total, 100.0)
 
     scored = ScoredListing(
         listing=listing,

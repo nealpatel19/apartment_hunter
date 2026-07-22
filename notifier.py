@@ -124,6 +124,16 @@ def _render_listing_card(scored: ScoredListing, rank: int) -> str:
         f"${analysis.parking_monthly_fee}/mo" if analysis.parking_monthly_fee > 0 else "Included / None"
     )
 
+    # Availability Chip Badge logic
+    avail_date_str = getattr(analysis, "available_date", "Immediate / Unspecified")
+    move_win = getattr(analysis, "move_in_window", "unspecified")
+    if move_win == "september_target":
+        avail_chip = f"<span style='background:#065f46;border:1px solid #059669;border-radius:20px;padding:4px 12px;font-size:12px;color:#a7f3d0;font-weight:600;'>🗓️ Avail: {avail_date_str} (Target Sept Match)</span>"
+    elif move_win == "august_or_immediate":
+        avail_chip = f"<span style='background:#78350f;border:1px solid #d97706;border-radius:20px;padding:4px 12px;font-size:12px;color:#fde68a;font-weight:600;'>⚡ Avail: {avail_date_str} (August Move-In)</span>"
+    else:
+        avail_chip = f"<span style='background:#1e3a8a;border:1px solid #2563eb;border-radius:20px;padding:4px 12px;font-size:12px;color:#bfdbfe;font-weight:600;'>🗓️ Avail: {avail_date_str}</span>"
+
     score_bars = _render_score_breakdown(scored)
 
     return f"""
@@ -147,8 +157,9 @@ def _render_listing_card(scored: ScoredListing, rank: int) -> str:
         </div>
       </div>
 
-      <!-- Quick amenity chips -->
+      <!-- Quick amenity & move-in chips -->
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;">
+        {avail_chip}
         <span style="background:#111827;border:1px solid #374151;border-radius:20px;padding:4px 12px;font-size:12px;color:#d1d5db;">{laundry_icon} {laundry_label}</span>
         {"<span style='background:#111827;border:1px solid #374151;border-radius:20px;padding:4px 12px;font-size:12px;color:#d1d5db;'>🌿 Outdoor Space</span>" if analysis.has_outdoor_space else ""}
         {"<span style='background:#111827;border:1px solid #374151;border-radius:20px;padding:4px 12px;font-size:12px;color:#d1d5db;'>🍽️ Dishwasher</span>" if analysis.has_dishwasher else ""}

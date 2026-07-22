@@ -110,6 +110,22 @@ class ListingAnalysis(BaseModel):
             "not mentioned. Use the explicit fee if stated."
         )
     )
+    available_date: str = Field(
+        description=(
+            "Move-in / availability date explicitly stated in the title or text "
+            "(e.g., 'Sept 15', 'August 1', 'Immediate', 'Now', 'Oct 1'). "
+            "If not mentioned, default to 'Immediate / Unspecified'."
+        )
+    )
+    move_in_window: str = Field(
+        description=(
+            "Availability category. Must be exactly one of: "
+            "'september_target' (September move-in), "
+            "'august_or_immediate' (August or immediate move-in), "
+            "'october_or_later' (October or later move-in), or "
+            "'unspecified'."
+        )
+    )
     ai_pro_bullet: str = Field(
         description=(
             "One concise, specific sentence highlighting the single strongest "
