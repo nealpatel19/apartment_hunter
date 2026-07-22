@@ -58,7 +58,7 @@ def _fetch_zillow_zip(zip_code: str) -> list[RawListing]:
     try:
         resp = requests.get(url, impersonate="chrome120", timeout=15)
         if resp.status_code != 200:
-            logger.warning("Zillow returned HTTP %d for zip %s", resp.status_code, zip_code)
+            logger.info("Zillow cloud IP restricted (HTTP %d) for zip %s — skipping.", resp.status_code, zip_code)
             return []
 
         match = re.search(
