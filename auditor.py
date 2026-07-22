@@ -1,14 +1,18 @@
 """
 auditor.py — AI Audit & Structured Data Extraction
 
-Uses Google Gemini 2.5 Flash with Pydantic structured output to extract
+Uses Google Gemini with Pydantic structured output to extract
 rich metadata from each listing and filter scams, room-shares, and sub-2BR units.
+
+Rate-limit aware: throttles to stay under free-tier RPM limits, retries on 429s,
+and rotates across multiple models as fallback.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from typing import Optional
 
@@ -25,13 +29,26 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 GEMINI_API_KEY: str = os.environ["GEMINI_API_KEY"]
-MODEL_ID: str = "gemini-3.5-flash-lite"
+
+# Model rotation pool — ordered by preference (best free-tier limits first)
+# gemini-3.5-flash-lite: 15 RPM, 500 RPD (primary workhorse)
+# gemini-3.5-flash:       5 RPM,  20 RPD (fallback #1)
+# gemini-3.6-flash:       5 RPM,  20 RPD (fallback #2)
+MODEL_POOL: list[str] = [
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.6-flash",
+]
 
 # Low temperature for factual extraction — minimize hallucination
 TEMPERATURE: float = 0.1
 
-# Delay between Gemini calls to avoid rate-limit bursts
-API_CALL_DELAY_SECONDS: float = 0.5
+# Throttle: 5 seconds between calls = 12 RPM (safely under the 15 RPM limit)
+API_CALL_DELAY_SECONDS: float = 5.0
+
+# Retry config for 429 rate-limit errors
+MAX_RETRIES: int = 3
+BASE_RETRY_WAIT: float = 60.0  # seconds — aligns with the per-minute quota reset
 
 # ---------------------------------------------------------------------------
 # Pydantic schema — Gemini will populate this with structured output
@@ -144,31 +161,83 @@ def _get_client() -> genai.Client:
 
 
 # ---------------------------------------------------------------------------
-# Core audit function
+# Retry-aware helper to extract wait time from 429 error messages
+# ---------------------------------------------------------------------------
+
+
+def _extract_retry_seconds(error_msg: str) -> float:
+    """Parse 'Please retry in XX.XXs' from a Gemini 429 error message."""
+    match = re.search(r"retry in ([\d.]+)s", str(error_msg))
+    if match:
+        return float(match.group(1)) + 2.0  # add 2s buffer
+    return BASE_RETRY_WAIT
+
+
+# ---------------------------------------------------------------------------
+# Core audit function with retry + model rotation
 # ---------------------------------------------------------------------------
 
 
 def _audit_single(listing: RawListing) -> Optional[ListingAnalysis]:
     """
-    Call Gemini to analyze one listing. Returns ListingAnalysis or None on error.
+    Call Gemini to analyze one listing. Retries on 429 rate-limit errors
+    and rotates through MODEL_POOL as fallback.
+
+    Returns ListingAnalysis or None if all attempts fail.
     """
     client = _get_client()
-    try:
-        response = client.models.generate_content(
-            model=MODEL_ID,
-            contents=_build_user_prompt(listing),
-            config=types.GenerateContentConfig(
-                system_instruction=_SYSTEM_PROMPT,
-                temperature=TEMPERATURE,
-                response_mime_type="application/json",
-                response_schema=ListingAnalysis,
-            ),
-        )
-        analysis: ListingAnalysis = response.parsed
-        return analysis
-    except Exception as exc:
-        logger.warning("Gemini audit failed for listing %s: %s", listing.id, exc)
-        return None
+    user_prompt = _build_user_prompt(listing)
+    config = types.GenerateContentConfig(
+        system_instruction=_SYSTEM_PROMPT,
+        temperature=TEMPERATURE,
+        response_mime_type="application/json",
+        response_schema=ListingAnalysis,
+    )
+
+    for model_id in MODEL_POOL:
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                response = client.models.generate_content(
+                    model=model_id,
+                    contents=user_prompt,
+                    config=config,
+                )
+                analysis: ListingAnalysis = response.parsed
+                return analysis
+
+            except Exception as exc:
+                error_str = str(exc)
+                is_rate_limit = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str
+
+                if is_rate_limit and attempt < MAX_RETRIES:
+                    wait = _extract_retry_seconds(error_str)
+                    logger.warning(
+                        "  Rate limited on %s (attempt %d/%d). "
+                        "Waiting %.0fs before retry...",
+                        model_id, attempt, MAX_RETRIES, wait,
+                    )
+                    time.sleep(wait)
+                    continue
+
+                elif is_rate_limit:
+                    logger.warning(
+                        "  Rate limited on %s — exhausted %d retries. "
+                        "Trying next model...",
+                        model_id, MAX_RETRIES,
+                    )
+                    break  # move to next model in pool
+
+                else:
+                    # Non-rate-limit error (e.g. 404, schema error) — skip this model
+                    logger.warning(
+                        "  Gemini error on %s: %s. Trying next model...",
+                        model_id, error_str[:120],
+                    )
+                    break  # move to next model in pool
+
+    # All models exhausted
+    logger.warning("  All models failed for listing %s.", listing.id)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -190,12 +259,20 @@ def audit_listings(
     results: list[tuple[RawListing, ListingAnalysis]] = []
     total = len(listings)
 
+    logger.info(
+        "Starting AI audit of %d listings. Throttle: %.0fs between calls "
+        "(~%.0f RPM). Model pool: %s",
+        total, API_CALL_DELAY_SECONDS,
+        60.0 / API_CALL_DELAY_SECONDS,
+        ", ".join(MODEL_POOL),
+    )
+
     for idx, listing in enumerate(listings, start=1):
         logger.info("Auditing listing %d/%d: %s", idx, total, listing.title[:60])
 
         analysis = _audit_single(listing)
         if analysis is None:
-            logger.warning("  → Skipped (audit error).")
+            logger.warning("  → Skipped (all audit attempts failed).")
             continue
 
         # Apply AI-derived filters
@@ -215,7 +292,7 @@ def audit_listings(
         logger.info("  → Qualified: %d BR, laundry=%s", analysis.true_bedroom_count, analysis.laundry_type)
         results.append((listing, analysis))
 
-        # Be a good API citizen
+        # Throttle between calls to stay under RPM limit
         if idx < total:
             time.sleep(API_CALL_DELAY_SECONDS)
 
