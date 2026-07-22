@@ -36,11 +36,11 @@ HEADERS = {
 # Target SF Zip Codes & broad SF search URLs
 ZIP_SEARCH_TEMPLATE = (
     "https://sfbay.craigslist.org/search/sfc/apa"
-    "?postal={zip_code}&search_distance=1&min_bedrooms=2&max_bedrooms=2"
+    "?postal={zip_code}&search_distance=1&min_bedrooms=2"
 )
 BROAD_SEARCH_URL = (
     "https://sfbay.craigslist.org/search/sfc/apa"
-    "?min_bedrooms=2&max_bedrooms=2"
+    "?min_bedrooms=2"
 )
 
 TARGET_ZIP_CODES: list[str] = ["94110", "94117", "94102", "94107", "94114"]

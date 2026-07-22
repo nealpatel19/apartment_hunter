@@ -2,9 +2,8 @@ name: SF Apartment Scanner
 
 on:
   schedule:
-    # Runs at 8:00 AM, 5:00 PM, and 9:00 PM Pacific Time (PST = UTC-8, PDT = UTC-7)
-    # Using PST offsets: 8AM PST = 16:00 UTC, 5PM PST = 01:00 UTC, 9PM PST = 05:00 UTC
-    - cron: "0 16,1,5 * * *"
+    # Runs every 3 hours around the clock
+    - cron: "0 */3 * * *"
   workflow_dispatch:  # Allow manual runs from the GitHub Actions UI
 
 jobs:
