@@ -35,6 +35,7 @@ LOCATION_TIER: dict[str, int] = {
     "94114": 100,  # Noe Valley / Castro / Duboce Triangle
     "94102": 90,   # Hayes Valley
     "94107": 80,   # SOMA / Potrero Hill / Dogpatch
+    "94158": 75,   # Mission Bay
 }
 DEFAULT_LOCATION_SCORE: int = 50  # Other SF zip codes
 

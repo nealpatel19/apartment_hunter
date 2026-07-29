@@ -43,7 +43,7 @@ BROAD_SEARCH_URL = (
     "?min_bedrooms=2"
 )
 
-TARGET_ZIP_CODES: list[str] = ["94110", "94117", "94102", "94107", "94114"]
+TARGET_ZIP_CODES: list[str] = ["94110", "94117", "94102", "94107", "94114", "94158"]
 
 # Non-SF cities to exclude immediately from search results
 NON_SF_LOCATIONS = [

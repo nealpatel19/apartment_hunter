@@ -31,7 +31,7 @@ APIFY_ACTOR_URL = (
     "https://api.apify.com/v2/acts/maxcopell~zillow-zip-search/run-sync-get-dataset-items"
 )
 
-TARGET_ZIP_CODES: list[str] = ["94110", "94117", "94102", "94107", "94114"]
+TARGET_ZIP_CODES: list[str] = ["94110", "94117", "94102", "94107", "94114", "94158"]
 MINIMUM_PRICE_FLOOR: int = 2_400
 MAXIMUM_PRICE_CAP: int = 4_400
 
